@@ -1,5 +1,6 @@
 require "socket"
 require "fileutils"
+require "zlib"
 
 print("Logs from your program will appear here!")
 
@@ -27,6 +28,8 @@ loop do
     case path
     when /\/echo\/.+/
       content = path.split("/").last
+      content = Zlib.gzip(content) if content_encoding
+
       client.puts "HTTP/1.1 200 OK\r\n"
       client.puts "Content-Encoding: #{content_encoding}\r\n" if content_encoding
       client.puts "Content-Type: text/plain\r\n"
