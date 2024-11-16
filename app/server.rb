@@ -21,8 +21,8 @@ loop do
     content_length = headers["Content-Length"].to_i
     body = client.read(content_length)
 
-    accept_encoding = headers["Accept-Encoding"]
-    content_encoding = "gzip" if accept_encoding === "gzip"
+    accept_encodings = headers["Accept-Encoding"].to_s.split(", ")
+    content_encoding = "gzip" if accept_encodings.include?("gzip")
 
     case path
     when /\/echo\/.+/
