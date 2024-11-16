@@ -8,12 +8,30 @@ server = TCPServer.new("localhost", 4221)
 loop do
   Thread.start(server.accept) do |client|
     method, path, _version = client.gets.split(" ")
+    header_arr = []
+    loop do
+      line = client.gets.strip
+
+      line.empty? ? break : header_arr.push(line)
+    end
+    headers = header_arr.each_with_object({}) do |header, obj|
+      key, value = header.split(": ")
+      obj[key] = value
+    end
+    content_length = headers["Content-Length"].to_i
+    body = client.read(content_length)
+
+    accept_encoding = headers["Accept-Encoding"]
+    content_encoding = "gzip" if accept_encoding === "gzip"
 
     case path
     when /\/echo\/.+/
-      str = path.split("/").last
-      response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{str.size}\r\n\r\n#{str}"
-      client.puts response
+      content = path.split("/").last
+      client.puts "HTTP/1.1 200 OK\r\n"
+      client.puts "Content-Encoding: #{content_encoding}\r\n" if content_encoding
+      client.puts "Content-Type: text/plain\r\n"
+      client.puts "Content-Length: #{content.size}\r\n\r\n"
+      client.puts content
     when /\/files\/.+/
       file_name = path.split("/").last
       directory = ARGV[1]
@@ -24,42 +42,29 @@ loop do
       when "GET"
         if File.exist?(file_path)
           content = File.read(file_path)
-          response = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{content.size}\r\n\r\n#{content}"
-          client.puts response
+          client.puts "HTTP/1.1 200 OK\r\n"
+          client.puts "Content-Type: application/octet-stream\r\n"
+          client.puts "Content-Length: #{content.size}\r\n\r\n"
+          client.puts content
         else
           client.puts "HTTP/1.1 404 Not Found\r\n\r\n"
         end
       when "POST"
-        body = nil
-        content_length = 0
-        loop do
-          line = client.gets
-          if line == "\r\n"
-            body = client.read(content_length)
-            break
-          elsif line.start_with?("Content-Length:")
-            content_length = line.split(" ").last.to_i
-          end
-        end
-
         File.write(file_path, body.to_s)
         client.puts "HTTP/1.1 201 Created\r\n\r\n"
       else
         client.puts "HTTP/1.1 404 Not Found\r\n\r\n"
       end
     when "/user-agent"
-      header = ""
-      loop do
-        header = client.gets
-        header.match?(/^User-Agent: .*$/) ? break : header = ""
-      end
+      user_agent = headers["User-Agent"]
 
-      if header.empty?
+      if user_agent.nil?
         client.puts "HTTP/1.1 404 Not Found\r\n\r\n"
       else
-        _header_key, header_value = header.split(" ")
-        response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{header_value.size}\r\n\r\n#{header_value}"
-        client.puts response
+        client.puts "HTTP/1.1 200 OK\r\n"
+        client.puts "Content-Type: text/plain\r\n"
+        client.puts "Content-Length: #{user_agent.size}\r\n\r\n"
+        client.puts user_agent
       end
     when "/"
       client.puts "HTTP/1.1 200 OK\r\n\r\n"
